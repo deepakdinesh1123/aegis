@@ -1,0 +1,30 @@
+{
+  "action": "synchronize",
+  "installation": {
+    "id": 123
+  },
+  "repository": {
+    "name": "test-repo",
+    "full_name": "test-owner/test-repo",
+    "owner": {
+      "login": "test-owner"
+    }
+  },
+  "pull_request": {
+    "number": 1,
+    "merged": false,
+    "user": {
+      "login": "test-user"
+    },
+    "head": {
+      "ref": "feature-1",
+      "sha": "synced-head"
+    },
+    "base": {
+      "ref": "main",
+      "sha": "base-1"
+    },
+    "mergeable": true,
+    "mergeable_state": "clean"
+  }
+}

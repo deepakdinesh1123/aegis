@@ -1,0 +1,30 @@
+{
+  "action": "closed",
+  "installation": {
+    "id": 123
+  },
+  "repository": {
+    "name": "test-repo",
+    "full_name": "test-owner/test-repo",
+    "owner": {
+      "login": "test-owner"
+    }
+  },
+  "pull_request": {
+    "number": 10,
+    "merged": true,
+    "user": {
+      "login": "test-user"
+    },
+    "head": {
+      "ref": "feature-10",
+      "sha": "head-10"
+    },
+    "base": {
+      "ref": "main",
+      "sha": "base-1"
+    },
+    "mergeable": true,
+    "mergeable_state": "clean"
+  }
+}
