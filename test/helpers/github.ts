@@ -94,6 +94,102 @@ export function mockOpenPullRequests(
     );
 }
 
+export function mockPullRequestFiles(
+  repository: string,
+  prNumber: number,
+  files: string[],
+) {
+  const [owner, repo] = repository.split("/");
+
+  return nock(GITHUB_API)
+    .get(`/repos/${owner}/${repo}/pulls/${prNumber}/files`)
+    .query(true)
+    .reply(
+      200,
+      files.map((filename) => ({
+        filename,
+      })),
+    );
+}
+
+/**
+ * Minimal GitHub mocks needed after opened / reopened / synchronize
+ * so the file-overlap scan does not fail with unmatched nock requests.
+ */
+export function mockOverlapScan(
+  repository: string,
+  pullRequestNumber: number,
+  options: {
+    files?: string[];
+    openPRs?: Array<{
+      number: number;
+      headSha: string;
+      baseSha: string;
+      baseBranch?: string;
+      files?: string[];
+    }>;
+    base?: string;
+  } = {},
+) {
+  const files = options.files ?? [];
+  const openPRs = options.openPRs ?? [];
+
+  mockPullRequestFiles(repository, pullRequestNumber, files);
+
+  if (files.length > 0) {
+    mockOpenPullRequests(repository, openPRs, { base: options.base });
+  }
+
+  for (const peer of openPRs) {
+    if (peer.number === pullRequestNumber) {
+      continue;
+    }
+
+    mockPullRequestFiles(repository, peer.number, peer.files ?? []);
+  }
+}
+
+export function mockOverlapComment(
+  repository: string,
+  prNumber: number,
+  commentId = 55555,
+) {
+  const [owner, repo] = repository.split("/");
+
+  return nock(GITHUB_API)
+    .post(
+      `/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+      (body) => {
+        expect(body.body).toContain("<!-- aegis-file-overlap -->");
+        return true;
+      },
+    )
+    .reply(201, {
+      id: commentId,
+      body: "file overlap",
+    });
+}
+
+export function mockUpdateOverlapComment(
+  repository: string,
+  commentId: number,
+) {
+  const [owner, repo] = repository.split("/");
+
+  return nock(GITHUB_API)
+    .patch(
+      `/repos/${owner}/${repo}/issues/comments/${commentId}`,
+      (body) => {
+        expect(body.body).toContain("<!-- aegis-file-overlap -->");
+        return true;
+      },
+    )
+    .reply(200, {
+      id: commentId,
+      body: "file overlap",
+    });
+}
+
 export function mockListComments(
   repository: string,
   prNumber: number,

@@ -10,6 +10,7 @@ import {
   notifyAuthor,
   refreshPullRequestState,
 } from "./github.js";
+import { reportFileOverlaps } from "./overlap.js";
 import {
   getPullRequestState,
   savePullRequestState,
@@ -24,6 +25,8 @@ interface ListedPullRequest {
 /**
  * Keep PR state up to date so we know what a PR looked like
  * before another PR was merged.
+ *
+ * Also report overlapping file changes with other open PRs.
  */
 async function handlePullRequestStateEvent(
   context: AppContext & {
@@ -35,6 +38,7 @@ async function handlePullRequestStateEvent(
   context.log.info(`Refreshing state for PR #${number}`);
 
   await refreshPullRequestState(context, number);
+  await reportFileOverlaps(context, number);
 }
 
 /**
@@ -178,6 +182,9 @@ async function checkAffectedPullRequest(
     buildPullRequestState(repository, current, notification, {
       status: "open",
       merged: false,
+      overlap_comment_id: previous.overlap_comment_id,
+      changed_files: previous.changed_files,
+      changed_files_sha: previous.changed_files_sha,
     }),
   );
 
@@ -214,6 +221,9 @@ async function checkAffectedPullRequest(
       {
         status: "open",
         merged: false,
+        overlap_comment_id: previous.overlap_comment_id,
+        changed_files: previous.changed_files,
+        changed_files_sha: previous.changed_files_sha,
       },
     ),
   );

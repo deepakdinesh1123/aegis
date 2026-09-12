@@ -42,4 +42,16 @@ export interface PullRequestState {
 
   /** GitHub issue comment ID of the conflict notification. */
   conflict_comment_id?: number;
+
+  /** GitHub issue comment ID of the file-overlap report. */
+  overlap_comment_id?: number;
+
+  /**
+   * Changed filenames for this PR (from pulls.listFiles).
+   * Used so overlap checks do not re-fetch every open PR on each sync.
+   */
+  changed_files?: string[];
+
+  /** Head SHA that `changed_files` was captured for. */
+  changed_files_sha?: string;
 }

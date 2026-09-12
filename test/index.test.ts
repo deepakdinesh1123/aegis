@@ -13,7 +13,10 @@ import {
   mockDeleteComment,
   mockListComments,
   mockOpenPullRequests,
+  mockOverlapComment,
+  mockOverlapScan,
   mockPullRequest,
+  mockUpdateOverlapComment,
 } from "./helpers/github.js";
 import {
   REPOSITORY,
@@ -76,6 +79,7 @@ describe("merge-conflict-bot", () => {
         baseSha: "base-1",
         mergeable: true,
       });
+      mockOverlapScan(REPOSITORY, 1);
 
       await receivePullRequest(openedFixture());
 
@@ -90,6 +94,59 @@ describe("merge-conflict-bot", () => {
         conflicted: false,
         conflict_notified: false,
         author_login: "test-user",
+      });
+    });
+
+    test("posts an overlap table when peer PRs share files", async () => {
+      await seedPullRequestState({
+        pull_request_number: 128,
+        mergeable: true,
+        head_sha: "h-128",
+        changed_files: ["src/service.py", "src/models.py"],
+        changed_files_sha: "h-128",
+      });
+      await seedPullRequestState({
+        pull_request_number: 125,
+        mergeable: true,
+        head_sha: "h-125",
+        changed_files: ["src/service.py"],
+        changed_files_sha: "h-125",
+      });
+
+      mockPullRequest(REPOSITORY, {
+        number: 1,
+        headSha: "head-1",
+        baseSha: "base-1",
+        mergeable: true,
+      });
+      // Only the synced PR's files are fetched from GitHub; peers use cache.
+      mockOverlapScan(REPOSITORY, 1, {
+        files: ["src/service.py", "src/models.py", "README.md"],
+        openPRs: [
+          {
+            number: 128,
+            headSha: "h-128",
+            baseSha: "base-1",
+          },
+          {
+            number: 125,
+            headSha: "h-125",
+            baseSha: "base-1",
+          },
+        ],
+      });
+      mockListComments(REPOSITORY, 1);
+      const comment = mockOverlapComment(REPOSITORY, 1, 501);
+
+      await receivePullRequest(openedFixture());
+
+      expect(comment.isDone()).toBe(true);
+
+      const saved = await getPullRequestState(REPOSITORY, 1);
+      expect(saved).toMatchObject({
+        overlap_comment_id: 501,
+        changed_files: ["src/service.py", "src/models.py", "README.md"],
+        changed_files_sha: "head-1",
       });
     });
   });
@@ -108,6 +165,7 @@ describe("merge-conflict-bot", () => {
         baseSha: "base-1",
         mergeable: true,
       });
+      mockOverlapScan(REPOSITORY, 1);
 
       await receivePullRequest(reopenedFixture());
 
@@ -137,6 +195,7 @@ describe("merge-conflict-bot", () => {
         baseSha: "base-1",
         mergeable: false,
       });
+      mockOverlapScan(REPOSITORY, 1);
 
       await receivePullRequest(synchronizeFixture());
 
@@ -164,6 +223,7 @@ describe("merge-conflict-bot", () => {
       });
       mockListComments(REPOSITORY, 1);
       const comment = mockComment(REPOSITORY, 1, 88);
+      mockOverlapScan(REPOSITORY, 1);
 
       await receivePullRequest(synchronizeFixture());
 
@@ -191,6 +251,7 @@ describe("merge-conflict-bot", () => {
         baseSha: "base-1",
         mergeable: true,
       });
+      mockOverlapScan(REPOSITORY, 1);
 
       await receivePullRequest(synchronizeFixture());
 
@@ -202,6 +263,50 @@ describe("merge-conflict-bot", () => {
         conflict_notified: false,
       });
       expect(saved?.conflict_comment_id).toBeUndefined();
+    });
+
+    test("updates the existing overlap comment instead of creating another", async () => {
+      await seedPullRequestState({
+        pull_request_number: 1,
+        mergeable: true,
+        overlap_comment_id: 501,
+      });
+      await seedPullRequestState({
+        pull_request_number: 125,
+        mergeable: true,
+        head_sha: "h-125",
+        changed_files: ["src/service.py", "other.py"],
+        changed_files_sha: "h-125",
+      });
+
+      mockPullRequest(REPOSITORY, {
+        number: 1,
+        headSha: "synced-head",
+        baseSha: "base-1",
+        mergeable: true,
+      });
+      mockOverlapScan(REPOSITORY, 1, {
+        files: ["src/service.py"],
+        openPRs: [
+          {
+            number: 125,
+            headSha: "h-125",
+            baseSha: "base-1",
+          },
+        ],
+      });
+      const update = mockUpdateOverlapComment(REPOSITORY, 501);
+
+      await receivePullRequest(synchronizeFixture());
+
+      expect(update.isDone()).toBe(true);
+
+      const saved = await getPullRequestState(REPOSITORY, 1);
+      expect(saved).toMatchObject({
+        overlap_comment_id: 501,
+        changed_files: ["src/service.py"],
+        changed_files_sha: "synced-head",
+      });
     });
   });
 

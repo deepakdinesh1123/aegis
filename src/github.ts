@@ -39,6 +39,9 @@ function buildPullRequestState(
   options: {
     status?: PullRequestState["status"];
     merged?: boolean;
+    overlap_comment_id?: number;
+    changed_files?: string[];
+    changed_files_sha?: string;
   } = {},
 ): PullRequestState {
   const conflicted = pr.mergeable === false;
@@ -60,6 +63,9 @@ function buildPullRequestState(
     observed_at: new Date().toISOString(),
     conflict_notified: notification.conflict_notified,
     conflict_comment_id: notification.conflict_comment_id,
+    overlap_comment_id: options.overlap_comment_id,
+    changed_files: options.changed_files,
+    changed_files_sha: options.changed_files_sha,
   };
 }
 
@@ -118,6 +124,9 @@ export async function markPullRequestClosed(
     observed_at: new Date().toISOString(),
     conflict_notified: previous?.conflict_notified ?? false,
     conflict_comment_id: previous?.conflict_comment_id,
+    overlap_comment_id: previous?.overlap_comment_id,
+    changed_files: previous?.changed_files,
+    changed_files_sha: previous?.changed_files_sha,
   };
 
   await savePullRequestState(state);
@@ -189,6 +198,9 @@ export async function refreshPullRequestState(
         {
           status: "closed",
           merged: previous?.merged ?? false,
+          overlap_comment_id: previous?.overlap_comment_id,
+          changed_files: previous?.changed_files,
+          changed_files_sha: previous?.changed_files_sha,
         },
       ),
     );
@@ -205,6 +217,9 @@ export async function refreshPullRequestState(
     buildPullRequestState(repository, pr, notification, {
       status: "open",
       merged: false,
+      overlap_comment_id: previous?.overlap_comment_id,
+      changed_files: previous?.changed_files,
+      changed_files_sha: previous?.changed_files_sha,
     }),
   );
 
@@ -236,6 +251,9 @@ export async function refreshPullRequestState(
       {
         status: "open",
         merged: false,
+        overlap_comment_id: previous?.overlap_comment_id,
+        changed_files: previous?.changed_files,
+        changed_files_sha: previous?.changed_files_sha,
       },
     ),
   );

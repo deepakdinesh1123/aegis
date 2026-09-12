@@ -29,6 +29,7 @@ export function createGithubContext(options?: {
   pullsGet?: ReturnType<typeof jest.fn>;
   paginate?: ReturnType<typeof jest.fn>;
   createComment?: ReturnType<typeof jest.fn>;
+  updateComment?: ReturnType<typeof jest.fn>;
   deleteComment?: ReturnType<typeof jest.fn>;
 }) {
   const pullsGet =
@@ -39,6 +40,14 @@ export function createGithubContext(options?: {
 
   const createComment =
     options?.createComment ??
+    jest.fn(async () => ({
+      data: {
+        id: 99,
+      },
+    }));
+
+  const updateComment =
+    options?.updateComment ??
     jest.fn(async () => ({
       data: {
         id: 99,
@@ -60,10 +69,13 @@ export function createGithubContext(options?: {
       rest: {
         pulls: {
           get: pullsGet,
+          list: jest.fn(),
+          listFiles: jest.fn(),
         },
         issues: {
           listComments: jest.fn(),
           createComment,
+          updateComment,
           deleteComment,
         },
       },
@@ -84,6 +96,7 @@ export function createGithubContext(options?: {
     context,
     pullsGet,
     createComment,
+    updateComment,
     deleteComment,
     paginate,
   };
