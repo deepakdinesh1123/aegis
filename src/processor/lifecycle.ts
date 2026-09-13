@@ -152,7 +152,7 @@ async function checkAffectedPullRequest(
   }
 
   if (current.state === "closed") {
-    await markPullRequestClosed(repository, pullRequestNumber, {
+    await closePullRequestAndRefreshPeers(context, repository, pullRequestNumber, {
       merged: false,
       baseBranch: current.baseBranch,
       authorLogin: current.authorLogin,
@@ -215,31 +215,51 @@ async function checkAffectedPullRequest(
   );
 }
 
+/**
+ * Mark a PR closed, drop it from the overlap graph, and refresh peer
+ * overlap comments inline so tables stop listing the closed PR.
+ */
+async function closePullRequestAndRefreshPeers(
+  context: AppContext,
+  repository: string,
+  pullRequestNumber: number,
+  options: {
+    merged: boolean;
+    baseBranch?: string;
+    authorLogin?: string;
+  },
+): Promise<void> {
+  const peers = await detachClosedPullRequestFromOverlaps(
+    repository,
+    pullRequestNumber,
+  );
+
+  await markPullRequestClosed(repository, pullRequestNumber, options);
+
+  if (peers.length === 0) {
+    return;
+  }
+
+  context.log.info(
+    `PR #${pullRequestNumber} closed; refreshing overlap comments on ${peers.length} peer PR(s)`,
+  );
+
+  await mapWithConcurrency(peers, MAX_CONCURRENT_PR_CHECKS, async (peer) => {
+    await reevaluateOverlapForPullRequest(context, peer);
+  });
+}
+
 async function handleClosedLifecycle(
   context: AppContext,
   job: PullRequestLifecycleJob,
 ): Promise<void> {
   const { repository, pull_request_number: number, installation_id } = job;
 
-  // Detach from peer overlap indices, then refresh peer comments immediately
-  // so the closed PR disappears from overlap tables without waiting on SQS.
-  const peers = await detachClosedPullRequestFromOverlaps(repository, number);
-
-  await markPullRequestClosed(repository, number, {
+  await closePullRequestAndRefreshPeers(context, repository, number, {
     merged: job.merged,
     baseBranch: job.base_branch,
     authorLogin: job.author_login,
   });
-
-  if (peers.length > 0) {
-    context.log.info(
-      `PR #${number} closed; refreshing overlap comments on ${peers.length} peer PR(s)`,
-    );
-
-    await mapWithConcurrency(peers, MAX_CONCURRENT_PR_CHECKS, async (peer) => {
-      await reevaluateOverlapForPullRequest(context, peer);
-    });
-  }
 
   if (!job.merged) {
     return;

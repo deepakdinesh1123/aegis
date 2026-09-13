@@ -37,8 +37,12 @@ function header(
  * Verifies the webhook signature and enqueues an SQS job. Does not process work.
  */
 export function createWebhookLambdaHandler(
-  secret = process.env.WEBHOOK_SECRET ?? "development",
+  secret: string | undefined = process.env.WEBHOOK_SECRET,
 ): APIGatewayProxyHandler {
+  if (!secret) {
+    throw new Error("WEBHOOK_SECRET is not configured");
+  }
+
   const webhooks = new Webhooks({ secret });
 
   return async (

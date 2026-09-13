@@ -1,4 +1,7 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import {
+  ConditionalCheckFailedException,
+  DynamoDBClient,
+} from "@aws-sdk/client-dynamodb";
 import {
   DeleteCommand,
   DynamoDBDocumentClient,
@@ -54,6 +57,53 @@ export async function savePullRequestState(
     new PutCommand({
       TableName: TABLE_NAME,
       Item: state,
+    }),
+  );
+}
+
+export function isConditionalCheckFailed(error: unknown): boolean {
+  return (
+    error instanceof ConditionalCheckFailedException ||
+    (typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      (error as { name: string }).name === "ConditionalCheckFailedException")
+  );
+}
+
+/**
+ * Put PR state only if `overlapping_pr_numbers` still matches what we read.
+ * Used for optimistic concurrency when mutating reverse overlap edges.
+ */
+export async function savePullRequestStateIfOverlapPeersMatch(
+  state: PullRequestState,
+  expectedPeers: number[] | undefined,
+): Promise<void> {
+  const expected = expectedPeers ?? [];
+
+  if (expected.length === 0) {
+    await db.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: state,
+        ConditionExpression:
+          "attribute_not_exists(overlapping_pr_numbers) OR size(overlapping_pr_numbers) = :zero",
+        ExpressionAttributeValues: {
+          ":zero": 0,
+        },
+      }),
+    );
+    return;
+  }
+
+  await db.send(
+    new PutCommand({
+      TableName: TABLE_NAME,
+      Item: state,
+      ConditionExpression: "overlapping_pr_numbers = :peers",
+      ExpressionAttributeValues: {
+        ":peers": expected,
+      },
     }),
   );
 }

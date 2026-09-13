@@ -6,10 +6,14 @@ import {
 } from "../overlap.js";
 import {
   getPullRequestState,
+  isConditionalCheckFailed,
   savePullRequestState,
+  savePullRequestStateIfOverlapPeersMatch,
 } from "../state.js";
 import { enqueueJob } from "../queue/sqs.js";
 import type { ReevaluateOverlapJob } from "../queue/messages.js";
+
+const OVERLAP_EDGE_MAX_ATTEMPTS = 8;
 
 function unionNumbers(a: number[], b: number[]): number[] {
   return [...new Set([...a, ...b])].sort((x, y) => x - y);
@@ -17,6 +21,61 @@ function unionNumbers(a: number[], b: number[]): number[] {
 
 function sortedUnique(values: number[]): number[] {
   return [...new Set(values)].sort((a, b) => a - b);
+}
+
+function samePeers(a: number[] | undefined, b: number[]): boolean {
+  const left = sortedUnique(a ?? []);
+  if (left.length !== b.length) {
+    return false;
+  }
+  return left.every((value, index) => value === b[index]);
+}
+
+/**
+ * Mutate one peer's overlapping_pr_numbers with optimistic concurrency so
+ * concurrent workers cannot clobber each other's edge updates.
+ */
+async function updatePeerOverlapEdges(
+  repository: string,
+  peer: number,
+  mutate: (current: number[]) => number[],
+  options: { skipIfClosed?: boolean } = {},
+): Promise<void> {
+  for (let attempt = 1; attempt <= OVERLAP_EDGE_MAX_ATTEMPTS; attempt++) {
+    const state = await getPullRequestState(repository, peer);
+    if (!state) {
+      return;
+    }
+    if (options.skipIfClosed && state.status === "closed") {
+      return;
+    }
+
+    const previousPeers = sortedUnique(state.overlapping_pr_numbers ?? []);
+    const nextPeers = sortedUnique(mutate(previousPeers));
+    if (samePeers(previousPeers, nextPeers)) {
+      return;
+    }
+
+    try {
+      await savePullRequestStateIfOverlapPeersMatch(
+        {
+          ...state,
+          overlapping_pr_numbers: nextPeers,
+          observed_at: new Date().toISOString(),
+        },
+        state.overlapping_pr_numbers,
+      );
+      return;
+    } catch (error) {
+      if (
+        isConditionalCheckFailed(error) &&
+        attempt < OVERLAP_EDGE_MAX_ATTEMPTS
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 /**
@@ -36,38 +95,18 @@ export async function syncPeerOverlapEdges(
   const removed = previousPeers.filter((n) => !next.has(n));
 
   for (const peer of added) {
-    const state = await getPullRequestState(repository, peer);
-    if (!state || state.status === "closed") {
-      continue;
-    }
-
-    const peers = sortedUnique([
-      ...(state.overlapping_pr_numbers ?? []),
-      sourcePr,
-    ]);
-
-    await savePullRequestState({
-      ...state,
-      overlapping_pr_numbers: peers,
-      observed_at: new Date().toISOString(),
-    });
+    await updatePeerOverlapEdges(
+      repository,
+      peer,
+      (current) => [...current, sourcePr],
+      { skipIfClosed: true },
+    );
   }
 
   for (const peer of removed) {
-    const state = await getPullRequestState(repository, peer);
-    if (!state) {
-      continue;
-    }
-
-    const peers = (state.overlapping_pr_numbers ?? []).filter(
-      (n) => n !== sourcePr,
+    await updatePeerOverlapEdges(repository, peer, (current) =>
+      current.filter((n) => n !== sourcePr),
     );
-
-    await savePullRequestState({
-      ...state,
-      overlapping_pr_numbers: peers,
-      observed_at: new Date().toISOString(),
-    });
   }
 }
 
