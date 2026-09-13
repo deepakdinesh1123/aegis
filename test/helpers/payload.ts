@@ -33,6 +33,7 @@ export function pullRequestPayload(
     repository: {
       name: repo,
       full_name: `${owner}/${repo}`,
+      default_branch: "main",
       owner: {
         login: owner,
       },

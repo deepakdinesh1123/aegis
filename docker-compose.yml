@@ -1,23 +1,60 @@
 services:
-  bot:
+  # GitHub webhook → SQS only (queuing Lambda locally via Probot + smee)
+  webhook:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: merge-conflict-bot
+    container_name: aegis-webhook
+    command: ["npm", "run", "start:webhook"]
     depends_on:
       dynamodb:
         condition: service_started
       dynamodb-init:
         condition: service_completed_successfully
+      elasticmq:
+        condition: service_started
     ports:
       - "3000:3000"
     environment:
       NODE_ENV: development
-      # Required so the process accepts traffic from Docker port publishing
-      # and from a host-side smee client.
       HOST: "0.0.0.0"
-      # App code reads DYNAMODB_TABLE_NAME; keep both for safety.
       DYNAMODB_TABLE_NAME: pull-request-state
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      SQS_ENDPOINT: http://elasticmq:9324
+      SQS_QUEUE_URL: http://elasticmq:9324/queue/aegis-events
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    env_file:
+      - .env
+    networks:
+      - bot
+    profiles:
+      - app
+
+  # SQS → processor Lambda (local ElasticMQ long-poll adapter)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis-worker
+    command: ["npm", "run", "start:worker"]
+    depends_on:
+      dynamodb:
+        condition: service_started
+      dynamodb-init:
+        condition: service_completed_successfully
+      elasticmq:
+        condition: service_started
+    environment:
+      NODE_ENV: development
+      DYNAMODB_TABLE_NAME: pull-request-state
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      SQS_ENDPOINT: http://elasticmq:9324
+      SQS_QUEUE_URL: http://elasticmq:9324/queue/aegis-events
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
     env_file:
       - .env
     networks:
@@ -27,7 +64,7 @@ services:
 
   dynamodb:
     image: amazon/dynamodb-local:latest
-    container_name: merge-conflict-bot-dynamodb
+    container_name: aegis-dynamodb
     command:
       - "-jar"
       - "DynamoDBLocal.jar"
@@ -43,7 +80,7 @@ services:
 
   dynamodb-init:
     image: amazon/aws-cli:latest
-    container_name: merge-conflict-bot-dynamodb-init
+    container_name: aegis-dynamodb-init
     depends_on:
       dynamodb:
         condition: service_started
@@ -78,6 +115,20 @@ services:
         echo "DynamoDB tables:"
         aws dynamodb list-tables \
           --endpoint-url http://dynamodb:8000
+    networks:
+      - bot
+    profiles:
+      - test
+      - app
+
+  elasticmq:
+    image: softwaremill/elasticmq-native:latest
+    container_name: aegis-elasticmq
+    ports:
+      - "9324:9324"
+      - "9325:9325"
+    volumes:
+      - ./elasticmq.conf:/opt/elasticmq.conf
     networks:
       - bot
     profiles:

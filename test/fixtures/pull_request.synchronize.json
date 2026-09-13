@@ -8,7 +8,8 @@
     "full_name": "test-owner/test-repo",
     "owner": {
       "login": "test-owner"
-    }
+    },
+    "default_branch": "main"
   },
   "pull_request": {
     "number": 1,

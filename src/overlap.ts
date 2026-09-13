@@ -234,6 +234,11 @@ export async function findFileOverlaps(
     others,
     concurrency,
     async (pr) => {
+      const peerState = await getPullRequestState(repository, pr.number);
+      if (peerState?.status === "closed") {
+        return null;
+      }
+
       const files = await getChangedFiles(
         context,
         repository,

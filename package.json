@@ -13,12 +13,19 @@
   ],
   "scripts": {
     "build": "tsc",
-    "start": "probot run ./lib/index.js",
-    "test": "cross-env DYNAMODB_TABLE_NAME=pull-request-state DYNAMODB_ENDPOINT=http://localhost:8000 AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_REGION=us-east-1 NODE_OPTIONS=--experimental-vm-modules jest"
+    "start": "npm run start:webhook",
+    "start:webhook": "probot run ./lib/index.js",
+    "start:worker": "node ./lib/local/worker-poller.js",
+    "package:lambda": "bash scripts/package-lambdas.sh",
+    "test": "cross-env DYNAMODB_TABLE_NAME=pull-request-state DYNAMODB_ENDPOINT=http://localhost:8000 SQS_ENDPOINT=http://localhost:9324 SQS_QUEUE_URL=http://localhost:9324/queue/aegis-events AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_REGION=us-east-1 WEBHOOK_SECRET=development NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1131.0",
+    "@aws-sdk/client-sqs": "^3.1131.0",
     "@aws-sdk/lib-dynamodb": "^3.1131.0",
+    "@octokit/auth-app": "^8.3.1",
+    "@octokit/rest": "^22.0.1",
+    "@octokit/webhooks": "^14.2.0",
     "probot": "^14.3.2"
   },
   "devDependencies": {
@@ -27,6 +34,7 @@
     "@types/nock": "^10.0.3",
     "@types/node": "^24.0.0",
     "cross-env": "^10.1.0",
+    "esbuild": "^0.28.2",
     "ioredis": "^5.10.1",
     "jest": "^30.5.1",
     "nock": "^14.0.17",

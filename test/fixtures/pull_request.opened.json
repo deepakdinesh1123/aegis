@@ -6,6 +6,7 @@
   "repository": {
     "name": "test-repo",
     "full_name": "test-owner/test-repo",
+    "default_branch": "main",
     "owner": {
       "login": "test-owner"
     }

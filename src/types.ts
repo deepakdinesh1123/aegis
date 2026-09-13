@@ -54,4 +54,10 @@ export interface PullRequestState {
 
   /** Head SHA that `changed_files` was captured for. */
   changed_files_sha?: string;
+
+  /**
+   * Peer PR numbers that currently share changed files with this PR.
+   * Used to efficiently re-evaluate peer overlap comments on sync.
+   */
+  overlapping_pr_numbers?: number[];
 }
