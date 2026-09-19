@@ -39,6 +39,10 @@ function buildPullRequestState(
   options: {
     status?: PullRequestState["status"];
     merged?: boolean;
+    overlap_comment_id?: number;
+    changed_files?: string[];
+    changed_files_sha?: string;
+    overlapping_pr_numbers?: number[];
   } = {},
 ): PullRequestState {
   const conflicted = pr.mergeable === false;
@@ -60,6 +64,10 @@ function buildPullRequestState(
     observed_at: new Date().toISOString(),
     conflict_notified: notification.conflict_notified,
     conflict_comment_id: notification.conflict_comment_id,
+    overlap_comment_id: options.overlap_comment_id,
+    changed_files: options.changed_files,
+    changed_files_sha: options.changed_files_sha,
+    overlapping_pr_numbers: options.overlapping_pr_numbers,
   };
 }
 
@@ -118,6 +126,11 @@ export async function markPullRequestClosed(
     observed_at: new Date().toISOString(),
     conflict_notified: previous?.conflict_notified ?? false,
     conflict_comment_id: previous?.conflict_comment_id,
+    overlap_comment_id: previous?.overlap_comment_id,
+    changed_files: previous?.changed_files,
+    changed_files_sha: previous?.changed_files_sha,
+    // Closed PRs leave the overlap graph.
+    overlapping_pr_numbers: [],
   };
 
   await savePullRequestState(state);
@@ -159,6 +172,7 @@ export async function getPullRequestWithMergeability(
 export async function refreshPullRequestState(
   context: AppContext,
   pullRequestNumber: number,
+  options: PullRequestFetchOptions = {},
 ): Promise<PullRequestInfo | null> {
   const { owner, repo } = context.repo();
   const repository = `${owner}/${repo}`;
@@ -166,6 +180,7 @@ export async function refreshPullRequestState(
   const pr = await getPullRequestWithMergeability(
     context,
     pullRequestNumber,
+    options,
   );
 
   if (!pr) {
@@ -189,6 +204,10 @@ export async function refreshPullRequestState(
         {
           status: "closed",
           merged: previous?.merged ?? false,
+          overlap_comment_id: previous?.overlap_comment_id,
+          changed_files: previous?.changed_files,
+          changed_files_sha: previous?.changed_files_sha,
+          overlapping_pr_numbers: previous?.overlapping_pr_numbers,
         },
       ),
     );
@@ -205,6 +224,10 @@ export async function refreshPullRequestState(
     buildPullRequestState(repository, pr, notification, {
       status: "open",
       merged: false,
+      overlap_comment_id: previous?.overlap_comment_id,
+      changed_files: previous?.changed_files,
+      changed_files_sha: previous?.changed_files_sha,
+      overlapping_pr_numbers: previous?.overlapping_pr_numbers,
     }),
   );
 
@@ -236,6 +259,10 @@ export async function refreshPullRequestState(
       {
         status: "open",
         merged: false,
+        overlap_comment_id: previous?.overlap_comment_id,
+        changed_files: previous?.changed_files,
+        changed_files_sha: previous?.changed_files_sha,
+        overlapping_pr_numbers: previous?.overlapping_pr_numbers,
       },
     ),
   );

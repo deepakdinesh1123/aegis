@@ -1,0 +1,34 @@
+# Copy to secret.tfvars (gitignored) and fill in values:
+#
+#   cp terraform.tfvars.example secret.tfvars
+#   # edit secret.tfvars
+#   tofu apply -var-file=secret.tfvars
+
+aws_region  = "us-east-1"
+environment = "prod"
+
+# From GitHub App settings
+github_app_id = "123456"
+
+# Full PEM including headers. Use heredoc in a .tfvars file is awkward;
+# prefer TF_VAR_github_app_private_key or a secret.tfvars with a single-line
+# key where "\n" are real newlines (tofu supports multi-line strings):
+#
+# github_app_private_key = <<-EOT
+# -----BEGIN RSA PRIVATE KEY-----
+# ...
+# -----END RSA PRIVATE KEY-----
+# EOT
+
+github_app_private_key = <<-EOT
+-----BEGIN RSA PRIVATE KEY-----
+REPLACE_ME
+-----END RSA PRIVATE KEY-----
+EOT
+
+github_webhook_secret = "replace-with-webhook-secret"
+
+# Optional tuning
+# worker_reserved_concurrency = 10
+# sqs_batch_size              = 5
+# lambda_memory_mb            = 512
