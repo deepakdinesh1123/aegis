@@ -42,4 +42,11 @@ export interface PullRequestState {
 
   /** GitHub issue comment ID of the conflict notification. */
   conflict_comment_id?: number;
+
+  /**
+   * Optimistic-locking version. Absent/undefined means "this item does
+   * not exist yet" for the purposes of a conditional write. Every
+   * successful save increments it by 1.
+   */
+  version?: number;
 }

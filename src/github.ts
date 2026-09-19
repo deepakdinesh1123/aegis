@@ -120,8 +120,7 @@ export async function markPullRequestClosed(
     conflict_comment_id: previous?.conflict_comment_id,
   };
 
-  await savePullRequestState(state);
-  return state;
+  return savePullRequestState(state, previous?.version);
 }
 
 /**
@@ -191,6 +190,7 @@ export async function refreshPullRequestState(
           merged: previous?.merged ?? false,
         },
       ),
+      previous?.version,
     );
 
     return pr;
@@ -201,11 +201,12 @@ export async function refreshPullRequestState(
     pr.mergeable === false,
   );
 
-  await savePullRequestState(
+  const saved = await savePullRequestState(
     buildPullRequestState(repository, pr, notification, {
       status: "open",
       merged: false,
     }),
+    previous?.version,
   );
 
   const needsConflictNotification =
@@ -238,6 +239,7 @@ export async function refreshPullRequestState(
         merged: false,
       },
     ),
+    saved.version,
   );
 
   return pr;

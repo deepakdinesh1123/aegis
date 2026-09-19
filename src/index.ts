@@ -11,6 +11,7 @@ import {
   refreshPullRequestState,
 } from "./github.js";
 import {
+  StateConflictError,
   getPullRequestState,
   savePullRequestState,
 } from "./state.js";
@@ -34,7 +35,21 @@ async function handlePullRequestStateEvent(
 
   context.log.info(`Refreshing state for PR #${number}`);
 
-  await refreshPullRequestState(context, number);
+  try {
+    await refreshPullRequestState(context, number);
+  } catch (err) {
+    if (err instanceof StateConflictError) {
+      // Another worker wrote a newer state for this PR first. Our view
+      // is stale, not wrong — the next event (or the merge-triggered
+      // recheck) will reconcile it, so it's safe to drop this write.
+      context.log.warn(
+        `Lost optimistic-lock race refreshing PR #${number}; skipping (will reconcile on next event)`,
+      );
+      return;
+    }
+
+    throw err;
+  }
 }
 
 /**
@@ -60,11 +75,30 @@ async function handlePullRequestClosed(
   const repository = `${owner}/${repo}`;
   const merged = Boolean(closedPR.merged);
 
-  await markPullRequestClosed(repository, closedPR.number, {
-    merged,
-    baseBranch: closedPR.base.ref,
-    authorLogin: closedPR.user?.login,
-  });
+  // Marking a PR closed matters (it stops future rechecks), so retry a
+  // couple of times on a lost lock race instead of silently dropping it —
+  // markPullRequestClosed re-reads the latest state on each call.
+  const MAX_CLOSE_ATTEMPTS = 3;
+
+  for (let attempt = 1; attempt <= MAX_CLOSE_ATTEMPTS; attempt++) {
+    try {
+      await markPullRequestClosed(repository, closedPR.number, {
+        merged,
+        baseBranch: closedPR.base.ref,
+        authorLogin: closedPR.user?.login,
+      });
+      break;
+    } catch (err) {
+      if (err instanceof StateConflictError && attempt < MAX_CLOSE_ATTEMPTS) {
+        context.log.warn(
+          `Lost optimistic-lock race marking PR #${closedPR.number} closed; retrying (attempt ${attempt})`,
+        );
+        continue;
+      }
+
+      throw err;
+    }
+  }
 
   context.log.info(
     `Marked PR #${closedPR.number} as closed` +
@@ -100,7 +134,21 @@ async function handlePullRequestClosed(
     openPRs,
     MAX_CONCURRENT_PR_CHECKS,
     async (pr) => {
-      await checkAffectedPullRequest(context, pr.number);
+      try {
+        await checkAffectedPullRequest(context, pr.number);
+      } catch (err) {
+        if (err instanceof StateConflictError) {
+          // Another worker already observed a newer state for this PR
+          // (e.g. its own opened/synchronize event landed concurrently).
+          // Don't let one PR's race fail the whole merge-triggered scan.
+          context.log.warn(
+            `Lost optimistic-lock race checking PR #${pr.number}; skipping (will reconcile on next event)`,
+          );
+          return;
+        }
+
+        throw err;
+      }
     },
   );
 }
@@ -174,11 +222,12 @@ async function checkAffectedPullRequest(
    * Persist the latest observation before deciding whether to notify.
    * Notification flags stay sticky while conflicted, and reset when clean.
    */
-  await savePullRequestState(
+  const saved = await savePullRequestState(
     buildPullRequestState(repository, current, notification, {
       status: "open",
       merged: false,
     }),
+    previous.version,
   );
 
   if (!becameConflicted) {
@@ -216,6 +265,7 @@ async function checkAffectedPullRequest(
         merged: false,
       },
     ),
+    saved.version,
   );
 }
 
