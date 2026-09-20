@@ -1,6 +1,12 @@
 locals {
+  # Hash the Lambda source and packaging inputs.
+  # This is used only to determine when the Lambda bundle needs
+  # to be rebuilt.
   lambda_src_hash = sha256(join("", concat(
-    [for f in sort(fileset("${path.module}/../src", "**/*.ts")) : filesha256("${path.module}/../src/${f}")],
+    [
+      for f in sort(fileset("${path.module}/../src", "**/*.ts")) :
+      filesha256("${path.module}/../src/${f}")
+    ],
     [
       filesha256("${path.module}/../package-lock.json"),
       filesha256("${path.module}/../scripts/package-lambdas.sh"),
@@ -35,13 +41,18 @@ resource "aws_lambda_function" "webhook" {
   function_name = "${local.name_prefix}-webhook"
   role          = aws_iam_role.webhook.arn
   handler       = "index.handler"
-  runtime       = "nodejs20.x"
+  runtime       = "nodejs24.x"
   architectures = ["x86_64"]
 
-  filename         = "${path.module}/../dist/lambda/webhook.zip"
-  source_code_hash = try(filebase64sha256("${path.module}/../dist/lambda/webhook.zip"), local.lambda_src_hash)
+  filename = "${path.module}/../dist/lambda/webhook.zip"
 
-  memory_size = var.lambda_memory_mb
+  # AWS expects a base64-encoded SHA-256 hash for source_code_hash.
+  # Hash the actual ZIP that was produced by the packaging script.
+  source_code_hash = filebase64sha256(
+    "${path.module}/../dist/lambda/webhook.zip"
+  )
+
+  memory_size = var.webhook_lambda_memory_mb
   timeout     = var.webhook_timeout_seconds
 
   environment {
@@ -61,16 +72,19 @@ resource "aws_lambda_function" "worker" {
   function_name = "${local.name_prefix}-worker"
   role          = aws_iam_role.worker.arn
   handler       = "index.handler"
-  runtime       = "nodejs20.x"
+  runtime       = "nodejs24.x"
   architectures = ["x86_64"]
 
-  filename         = "${path.module}/../dist/lambda/worker.zip"
-  source_code_hash = try(filebase64sha256("${path.module}/../dist/lambda/worker.zip"), local.lambda_src_hash)
+  filename = "${path.module}/../dist/lambda/worker.zip"
 
-  memory_size = var.lambda_memory_mb
+  # AWS expects a base64-encoded SHA-256 hash for source_code_hash.
+  # Hash the actual ZIP that was produced by the packaging script.
+  source_code_hash = filebase64sha256(
+    "${path.module}/../dist/lambda/worker.zip"
+  )
+
+  memory_size = var.worker_lambda_memory_mb
   timeout     = var.worker_timeout_seconds
-
-  reserved_concurrent_executions = var.worker_reserved_concurrency
 
   environment {
     variables = merge(local.common_env, {

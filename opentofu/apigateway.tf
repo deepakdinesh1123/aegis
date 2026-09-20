@@ -22,4 +22,10 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.webhook.id
   name        = "$default"
   auto_deploy = true
+
+  route_settings {
+    route_key              = "POST /webhook"
+    throttling_rate_limit  = 5
+    throttling_burst_limit = 10
+  }
 }
