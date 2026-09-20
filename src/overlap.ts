@@ -99,55 +99,52 @@ function overlapEmoji(count: number): string {
   return "🟠";
 }
 
-function pad(value: string, width: number): string {
-  if (value.length >= width) {
-    return value.slice(0, width);
-  }
+/**
+ * Link text for markdown tables/lists that escapes characters which would
+ * otherwise break the `|`-delimited cell or the `[]()` link syntax.
+ */
+function escapeTableCell(value: string): string {
+  return value.replace(/\|/g, "\\|");
+}
 
-  return value + " ".repeat(width - value.length);
+function pullRequestLink(
+  repoFullName: string,
+  pullRequestNumber: number,
+): string {
+  const url = `https://github.com/${repoFullName}/pull/${pullRequestNumber}`;
+  return `[#${pullRequestNumber}](${url})`;
 }
 
 /**
- * Build the ASCII overlap table shown in the PR comment.
+ * Build the overlap table shown in the PR comment as a real Markdown table
+ * (not a code-fenced block) so the PR column renders as clickable links.
  */
-export function formatOverlapTable(overlaps: FileOverlap[]): string {
+export function formatOverlapTable(
+  overlaps: FileOverlap[],
+  repoFullName: string,
+): string {
   const rows = overlaps.map((overlap) => {
     const count = overlap.overlappingFiles.length;
-    const pr = `#${overlap.pullRequestNumber}`;
-    const files = formatFileList(overlap.overlappingFiles);
+    const pr = pullRequestLink(repoFullName, overlap.pullRequestNumber);
+    const files = escapeTableCell(formatFileList(overlap.overlappingFiles));
     const summary = `${count} file${count === 1 ? "" : "s"} ${overlapEmoji(count)}`;
 
     return { pr, files, summary };
   });
 
-  const prWidth = Math.max(6, ...rows.map((row) => row.pr.length));
-  const filesWidth = Math.max(5, ...rows.map((row) => row.files.length));
-  const overlapWidth = Math.max(7, ...rows.map((row) => row.summary.length));
-
-  const line = (left: string, mid: string, right: string, fill: string) =>
-    left +
-    fill.repeat(prWidth + 2) +
-    mid +
-    fill.repeat(filesWidth + 2) +
-    mid +
-    fill.repeat(overlapWidth + 2) +
-    right;
-
-  const row = (pr: string, files: string, summary: string) =>
-    `│ ${pad(pr, prWidth)} │ ${pad(files, filesWidth)} │ ${pad(summary, overlapWidth)} │`;
-
   const lines = [
-    line("┌", "┬", "┐", "─"),
-    row("PR", "Files", "Overlap"),
-    line("├", "┼", "┤", "─"),
-    ...rows.map((entry) => row(entry.pr, entry.files, entry.summary)),
-    line("└", "┴", "┘", "─"),
+    "| PR | Files | Overlap |",
+    "| --- | --- | --- |",
+    ...rows.map((entry) => `| ${entry.pr} | ${entry.files} | ${entry.summary} |`),
   ];
 
   return lines.join("\n");
 }
 
-export function buildOverlapCommentBody(overlaps: FileOverlap[]): string {
+export function buildOverlapCommentBody(
+  overlaps: FileOverlap[],
+  repoFullName: string,
+): string {
   if (overlaps.length === 0) {
     return [
       OVERLAP_COMMENT_MARKER,
@@ -171,9 +168,7 @@ export function buildOverlapCommentBody(overlaps: FileOverlap[]): string {
     "",
     "These open PRs modify some of the same files as this one:",
     "",
-    "```",
-    formatOverlapTable(sorted),
-    "```",
+    formatOverlapTable(sorted, repoFullName),
   ].join("\n");
 }
 
@@ -305,7 +300,7 @@ export async function upsertOverlapComment(
 ): Promise<number | undefined> {
   const { owner, repo } = context.repo();
   const repository = `${owner}/${repo}`;
-  const body = buildOverlapCommentBody(overlaps);
+  const body = buildOverlapCommentBody(overlaps, repository);
 
   const previous = await getPullRequestState(repository, pullRequestNumber);
 

@@ -15,24 +15,29 @@ import { REPOSITORY } from "./helpers/payload.js";
 import { seedPullRequestState } from "./helpers/state.js";
 
 describe("formatOverlapTable", () => {
-  test("renders an ASCII table with overlap severity markers", () => {
-    const table = formatOverlapTable([
-      {
-        pullRequestNumber: 128,
-        overlappingFiles: ["src/service.py", "src/models.py"],
-      },
-      {
-        pullRequestNumber: 125,
-        overlappingFiles: ["src/service.py"],
-      },
-    ]);
+  test("renders a Markdown table with clickable PR links and severity markers", () => {
+    const table = formatOverlapTable(
+      [
+        {
+          pullRequestNumber: 128,
+          overlappingFiles: ["src/service.py", "src/models.py"],
+        },
+        {
+          pullRequestNumber: 125,
+          overlappingFiles: ["src/service.py"],
+        },
+      ],
+      "acme/widgets",
+    );
 
-    expect(table).toContain("┌");
-    expect(table).toContain("PR");
-    expect(table).toContain("Files");
-    expect(table).toContain("Overlap");
-    expect(table).toContain("#128");
-    expect(table).toContain("#125");
+    expect(table).toContain("| PR | Files | Overlap |");
+    expect(table).toContain("| --- | --- | --- |");
+    expect(table).toContain(
+      "[#128](https://github.com/acme/widgets/pull/128)",
+    );
+    expect(table).toContain(
+      "[#125](https://github.com/acme/widgets/pull/125)",
+    );
     expect(table).toContain("service.py, models.py");
     expect(table).toContain("2 files 🔴");
     expect(table).toContain("1 file 🟠");
@@ -41,30 +46,36 @@ describe("formatOverlapTable", () => {
 
 describe("buildOverlapCommentBody", () => {
   test("includes the marker and a clear empty state", () => {
-    const body = buildOverlapCommentBody([]);
+    const body = buildOverlapCommentBody([], "acme/widgets");
 
     expect(body).toContain(OVERLAP_COMMENT_MARKER);
     expect(body).toContain("No overlapping file changes");
   });
 
-  test("wraps the table in a code fence and sorts by overlap size", () => {
-    const body = buildOverlapCommentBody([
-      {
-        pullRequestNumber: 125,
-        overlappingFiles: ["src/service.py"],
-      },
-      {
-        pullRequestNumber: 128,
-        overlappingFiles: ["src/service.py", "src/models.py"],
-      },
-      {
-        pullRequestNumber: 131,
-        overlappingFiles: ["api/views.py"],
-      },
-    ]);
+  test("renders a real Markdown table (no code fence) with PR links, sorted by overlap size", () => {
+    const body = buildOverlapCommentBody(
+      [
+        {
+          pullRequestNumber: 125,
+          overlappingFiles: ["src/service.py"],
+        },
+        {
+          pullRequestNumber: 128,
+          overlappingFiles: ["src/service.py", "src/models.py"],
+        },
+        {
+          pullRequestNumber: 131,
+          overlappingFiles: ["api/views.py"],
+        },
+      ],
+      "acme/widgets",
+    );
 
     expect(body).toContain(OVERLAP_COMMENT_MARKER);
-    expect(body).toContain("```");
+    expect(body).not.toContain("```");
+    expect(body).toContain(
+      "[#128](https://github.com/acme/widgets/pull/128)",
+    );
     expect(body.indexOf("#128")).toBeLessThan(body.indexOf("#125"));
     expect(body.indexOf("#125")).toBeLessThan(body.indexOf("#131"));
     expect(body).toContain("views.py");
