@@ -40,10 +40,16 @@ variable "dynamodb_table_name" {
   default     = "pull-request-state"
 }
 
-variable "lambda_memory_mb" {
+variable "webhook_lambda_memory_mb" {
   type        = number
   description = "Memory for both Lambdas (MB)."
-  default     = 512
+  default     = 128
+}
+
+variable "worker_lambda_memory_mb" {
+  type        = number
+  description = "Memory for both Lambdas (MB)."
+  default     = 256
 }
 
 variable "webhook_timeout_seconds" {

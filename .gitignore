@@ -8,3 +8,4 @@ lib
 dist
 
 tsconfig.tsbuildinfo
+*.tfvars
