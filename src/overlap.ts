@@ -111,7 +111,12 @@ function pullRequestLink(
   repoFullName: string,
   pullRequestNumber: number,
 ): string {
-  const url = `https://github.com/${repoFullName}/pull/${pullRequestNumber}`;
+  // redirect.github.com (not github.com) so linking to a peer PR here does
+  // NOT generate a "mentioned this pull request" backlink/timeline event on
+  // that PR every time this comment is upserted. Still resolves and is
+  // clickable — GitHub just forwards it to the real github.com URL.
+  // https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/autolinked-references-and-urls
+  const url = `https://redirect.github.com/${repoFullName}/pull/${pullRequestNumber}`;
   return `[#${pullRequestNumber}](${url})`;
 }
 
