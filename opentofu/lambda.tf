@@ -14,15 +14,6 @@ locals {
   )))
 }
 
-resource "terraform_data" "lambda_bundle" {
-  triggers_replace = [local.lambda_src_hash]
-
-  provisioner "local-exec" {
-    command     = "bash '${path.module}/../scripts/package-lambdas.sh'"
-    working_dir = path.module
-  }
-}
-
 resource "aws_cloudwatch_log_group" "webhook" {
   name              = "/aws/lambda/${local.name_prefix}-webhook"
   retention_in_days = var.log_retention_days
@@ -62,7 +53,6 @@ resource "aws_lambda_function" "webhook" {
   }
 
   depends_on = [
-    terraform_data.lambda_bundle,
     aws_cloudwatch_log_group.webhook,
     aws_iam_role_policy.webhook,
   ]
@@ -94,7 +84,6 @@ resource "aws_lambda_function" "worker" {
   }
 
   depends_on = [
-    terraform_data.lambda_bundle,
     aws_cloudwatch_log_group.worker,
     aws_iam_role_policy.worker,
   ]
